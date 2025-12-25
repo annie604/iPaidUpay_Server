@@ -11,9 +11,67 @@ datasource db {
 }
 
 model User {
-  id       Int    @id @default(autoincrement())
-  username  String   @unique
-  password  String
-  name      String
+  id        Int      @id @default(autoincrement())
+  username  String   @unique // 登入帳號 (ID)
+  password  String           // 密碼 (加密後)
+  name      String           // 顯示名稱 (Amy, Bob)
   createdAt DateTime @default(now())
+
+  // --- 關聯設定 ---
+  
+  // 1. 這個人「開」的團 (他是團長)
+  createdGroups Group[] @relation("GroupCreator")
+
+  // 2. 這個人「填」的單 (他是參加者)
+  orders        Order[]
+}
+
+// 2. 團購主單 (Group)
+model Group {
+  id        Int      @id @default(autoincrement())
+  title     String   // 團名 (例如: KFC)
+  startTime DateTime // 開始時間
+  endTime   DateTime // 結束時間
+  status    String   @default("OPEN") // 狀態 (OPEN, CLOSED)
+  createdAt DateTime @default(now())
+
+  // --- 關聯：團長是誰？ ---
+  creatorId Int
+  creator   User   @relation("GroupCreator", fields: [creatorId], references: [id])
+
+  // --- 關聯：這團有哪些訂單？ ---
+  orders    Order[]
+}
+
+// 3. 個人訂單 (Order) - 連結 人 與 團
+model Order {
+  id      Int      @id @default(autoincrement())
+  
+  // --- 關聯：誰填的？ ---
+  userId  Int
+  user    User     @relation(fields: [userId], references: [id])
+  
+  // --- 關聯：哪一團？ ---
+  groupId Int
+  group   Group    @relation(fields: [groupId], references: [id])
+
+  // --- 內容：買了什麼？ ---
+  items   OrderItem[]
+  
+  // Pament status: "UNPAID" or "PAID"
+  paymentStatus String   @default("UNPAID")
+  
+  createdAt DateTime @default(now())
+}
+
+// 4. 訂單細項 (OrderItem) - 商品內容
+model OrderItem {
+  id       Int    @id @default(autoincrement())
+  name     String // 品項名 (Hamburger)
+  price    Int    // 單價 (130)
+  quantity Int    // 數量 (2)
+  
+  // --- 關聯：屬於哪張單？ ---
+  orderId  Int
+  order    Order  @relation(fields: [orderId], references: [id])
 }
