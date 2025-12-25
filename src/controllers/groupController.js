@@ -72,7 +72,7 @@ const getDashboardGroups = async (req, res) => {
 
 const createGroup = async (req, res) => {
     try {
-        const { title, startTime, endTime, products } = req.body;
+        const { title, startTime, endTime, products, invitedUserIds } = req.body;
         const userId = req.user.userId;
 
         if (!title || !startTime || !endTime) {
@@ -88,10 +88,24 @@ const createGroup = async (req, res) => {
                 status: 'OPEN',
                 products: {
                     create: products // Array of { name, price }
+                },
+                // Create orders for invited users (including creator if we want, but usually creator logic is separate or implied)
+                // Let's create an empty Order for the Creator AND Invited Users so they all show up in the list.
+                // Wait, existing logic might rely on Order existence for "participants".
+                // Yes: convert orders to participants list.
+                // So we MUST create an order for the creator too.
+                orders: {
+                    create: [
+                        { userId: userId }, // Creator's order
+                        ...(invitedUserIds || []).map(invitedId => ({
+                            userId: invitedId
+                        }))
+                    ]
                 }
             },
             include: {
-                products: true
+                products: true,
+                orders: true
             }
         });
 
