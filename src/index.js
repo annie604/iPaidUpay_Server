@@ -4,6 +4,8 @@ require('dotenv').config(); // Check if .env is loaded (auto loaded by prisma co
 const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
+const groupRoutes = require('./routes/groupRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 const app = express();
 const PORT = 3001;
@@ -17,8 +19,8 @@ app.use(cors({
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);
-const groupRoutes = require('./routes/groupRoutes');
 app.use('/api/groups', groupRoutes);
+app.use('/api/users', userRoutes);
 
 app.get('/', (req, res) => {
     res.send('IpaidUpay API is running');

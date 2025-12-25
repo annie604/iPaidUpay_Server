@@ -24,6 +24,10 @@ model User {
 
   // 2. 這個人「填」的單 (他是參加者)
   orders        Order[]
+
+  // 3. 朋友關係
+  friends   User[]   @relation("UserFriends")
+  friendOf  User[]   @relation("UserFriends")
 }
 
 // 2. 團購主單 (Group)
