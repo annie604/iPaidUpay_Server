@@ -70,6 +70,39 @@ const getDashboardGroups = async (req, res) => {
     }
 };
 
+const createGroup = async (req, res) => {
+    try {
+        const { title, startTime, endTime, products } = req.body;
+        const userId = req.user.userId;
+
+        if (!title || !startTime || !endTime) {
+            return res.status(400).json({ error: 'Title, start time, and end time are required' });
+        }
+
+        const newGroup = await prisma.group.create({
+            data: {
+                title,
+                startTime: new Date(startTime),
+                endTime: new Date(endTime),
+                creatorId: userId,
+                status: 'OPEN',
+                products: {
+                    create: products // Array of { name, price }
+                }
+            },
+            include: {
+                products: true
+            }
+        });
+
+        res.status(201).json(newGroup);
+    } catch (error) {
+        console.error("Error creating group:", error);
+        res.status(500).json({ error: 'Failed to create group' });
+    }
+};
+
 module.exports = {
-    getDashboardGroups
+    getDashboardGroups,
+    createGroup
 };

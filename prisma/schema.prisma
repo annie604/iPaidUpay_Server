@@ -41,6 +41,20 @@ model Group {
 
   // --- 關聯：這團有哪些訂單？ ---
   orders    Order[]
+
+  // ✨ 新增關聯：這團的菜單有哪些東西？
+  products    GroupProduct[]
+}
+
+// ✨ 新增：團購可選品項 (這就是菜單！)
+model GroupProduct {
+  id       Int    @id @default(autoincrement())
+  name     String // 品項名 (例如: "KFC 蛋塔")
+  price    Int    // 設定好的價格 (例如: 35)
+  
+  // 屬於哪一團的菜單？
+  groupId  Int
+  group    Group  @relation(fields: [groupId], references: [id])
 }
 
 // 3. 個人訂單 (Order) - 連結 人 與 團
