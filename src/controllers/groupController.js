@@ -39,8 +39,8 @@ const getDashboardGroups = async (req, res) => {
                     myOrder = o;
                 }
 
-                // Collect invite info (User ID)
-                invites.push({ userId: o.userId });
+                // Collect invite info (User ID and Name)
+                invites.push({ userId: o.userId, name: o.user.name });
 
                 // Aggregate Items for Summary
                 o.items.forEach(item => {
