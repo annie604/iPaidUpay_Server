@@ -93,7 +93,7 @@ const getDashboardGroups = async (req, res) => {
 
 const createGroup = async (req, res) => {
     try {
-        const { title, startTime, endTime, products, invitedUserIds } = req.body;
+        const { title, startTime, endTime, products, invitedUserIds, initialOrder } = req.body;
         const userId = req.user.userId;
 
         if (!title || !startTime || !endTime) {
@@ -117,7 +117,17 @@ const createGroup = async (req, res) => {
                 // So we MUST create an order for the creator too.
                 orders: {
                     create: [
-                        { userId: userId }, // Creator's order
+                        {
+                            userId: userId,
+                            // Create items for the creator's initial order if provided
+                            items: initialOrder && initialOrder.length > 0 ? {
+                                create: initialOrder.map(io => ({
+                                    name: io.name,
+                                    price: Number(io.price),
+                                    quantity: Number(io.quantity)
+                                }))
+                            } : undefined
+                        },
                         ...(invitedUserIds || []).map(invitedId => ({
                             userId: invitedId
                         }))
