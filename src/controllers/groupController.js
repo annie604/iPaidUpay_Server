@@ -248,21 +248,92 @@ const updateGroup = async (req, res) => {
 
             // 3. Delete missing
             const keepIds = products.filter(p => p.id).map(p => p.id);
-            // We must check if any OrderItems refer to these products before deleting.
-            // If we delete a product, and an OrderItem refers to it?
-            // OrderItem has NO relation to Product in our schema! purely name/price copy.
-            // So it is SAFE to delete products.
-            const deleteOp = prisma.groupProduct.deleteMany({
+
+            // Find products that are about to be deleted
+            const productsToDelete = await prisma.groupProduct.findMany({
                 where: {
                     groupId: parseInt(id),
                     id: { notIn: keepIds }
                 }
             });
 
-            await prisma.$transaction([...updates, ...creates, deleteOp]);
+            if (productsToDelete.length > 0) {
+                const namesToDelete = productsToDelete.map(p => p.name);
+
+                // Strict Check: Are any of these products used in existing orders?
+                // Note: OrderItem stores 'name', not ID. So we check by name match within this group.
+                const usedItem = await prisma.orderItem.findFirst({
+                    where: {
+                        order: { groupId: parseInt(id) },
+                        name: { in: namesToDelete }
+                    }
+                });
+
+                if (usedItem) {
+                    return res.status(400).json({
+                        error: `Cannot delete item "${usedItem.name}" because it has been ordered by a member.`
+                    });
+                }
+
+                // If safe, verify delete operation in transaction
+                const deleteOp = prisma.groupProduct.deleteMany({
+                    where: { id: { in: productsToDelete.map(p => p.id) } }
+                });
+
+            } else {
+                // No deletions, just updates and creates
+
+                // --- SYNC UPDATE LOGIC START ---
+                // Detect updates where name or price changed, and propagate to OrderItems
+
+                // 1. Fetch current DB state of products (before update)
+                const existingProducts = await prisma.groupProduct.findMany({
+                    where: { groupId: parseInt(id) }
+                });
+
+                const syncOps = [];
+
+                // 2. Iterate through incoming products that have an ID (updates)
+                for (const newProd of products) {
+                    if (newProd.id) {
+                        const oldProd = existingProducts.find(p => p.id === newProd.id);
+                        if (oldProd) {
+                            // Check if critical fields changed
+                            if (oldProd.name !== newProd.name || oldProd.price !== newProd.price) {
+                                // Add operation to update all OrderItems sharing this old name in this group
+                                console.log(`Syncing product update: ${oldProd.name} -> ${newProd.name} ($${newProd.price})`);
+                                syncOps.push(
+                                    prisma.orderItem.updateMany({
+                                        where: {
+                                            order: { groupId: parseInt(id) },
+                                            name: oldProd.name // Find items snapshot with old name
+                                        },
+                                        data: {
+                                            name: newProd.name,
+                                            price: newProd.price
+                                        }
+                                    })
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Add syncOps to transaction
+                await prisma.$transaction([...updates, ...creates, ...syncOps]);
+                // --- SYNC UPDATE LOGIC END ---
+            }
         }
 
-        res.json({ message: 'Group updated successfully' });
+        // Fetch updated products to return to frontend
+        const updatedProducts = await prisma.groupProduct.findMany({
+            where: { groupId: parseInt(id) }
+        });
+
+        res.json({
+            message: 'Group updated successfully',
+            products: updatedProducts
+        });
     } catch (error) {
         console.error("Error updating group:", error);
         res.status(500).json({ error: 'Failed to update group' });
