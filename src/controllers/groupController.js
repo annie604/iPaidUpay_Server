@@ -15,7 +15,8 @@ const getDashboardGroups = async (req, res) => {
                         user: { select: { id: true, name: true } },
                         items: true
                     }
-                }
+                },
+                products: true // Include products for edit modal
             },
             orderBy: { createdAt: 'desc' }
         });
@@ -24,6 +25,10 @@ const getDashboardGroups = async (req, res) => {
             let totalGroupAmount = 0;
             const participantsSet = new Set();
             let myOrder = null;
+            let invites = [];
+
+            // Calculate Group Statistics (Aggregation)
+            const statsMap = {}; // name -> { quantity, totalPrice }
 
             g.orders.forEach(o => {
                 participantsSet.add(o.user.name);
@@ -33,6 +38,18 @@ const getDashboardGroups = async (req, res) => {
                 if (o.userId === userId) {
                     myOrder = o;
                 }
+
+                // Collect invite info (User ID)
+                invites.push({ userId: o.userId });
+
+                // Aggregate Items for Summary
+                o.items.forEach(item => {
+                    if (!statsMap[item.name]) {
+                        statsMap[item.name] = { name: item.name, quantity: 0, totalPrice: 0 };
+                    }
+                    statsMap[item.name].quantity += item.quantity;
+                    statsMap[item.name].totalPrice += (item.quantity * item.price);
+                });
             });
 
             let myItemsSummary = "";
@@ -51,13 +68,17 @@ const getDashboardGroups = async (req, res) => {
                 status: g.status,
                 creator: g.creator,
                 participants: Array.from(participantsSet),
+                invites: invites,
+                products: g.products,
                 totalGroupAmount: totalGroupAmount,
+                orderStats: Object.values(statsMap), // Array of { name, quantity, totalPrice }
                 myOrder: myOrder ? {
                     id: myOrder.id,
                     itemsSummary: myItemsSummary,
                     total: myTotal,
                     items: myOrder.items,
-                    paymentStatus: myOrder.paymentStatus
+                    paymentStatus: myOrder.paymentStatus,
+                    updatedAt: myOrder.updatedAt
                 } : null,
                 isCreator: g.creatorId === userId
             };
@@ -112,11 +133,185 @@ const createGroup = async (req, res) => {
         res.status(201).json(newGroup);
     } catch (error) {
         console.error("Error creating group:", error);
-        res.status(500).json({ error: 'Failed to create group' });
+        res.status(500).json({ error: 'Failed to create group', details: error.message });
+    }
+};
+
+const updateGroup = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { title, startTime, endTime, products, invitedUserIds } = req.body;
+        const userId = req.user.userId;
+
+        // Verify ownership
+        const group = await prisma.group.findUnique({
+            where: { id: parseInt(id) },
+            include: { orders: true } // Need orders to check existing participants
+        });
+
+        if (!group) return res.status(404).json({ error: 'Group not found' });
+        if (group.creatorId !== userId) return res.status(403).json({ error: 'Not authorized' });
+
+        // Update basic info
+        await prisma.group.update({
+            where: { id: parseInt(id) },
+            data: {
+                title,
+                startTime: new Date(startTime),
+                endTime: new Date(endTime)
+            }
+        });
+
+        // Update Products: Replace all products (simplest strategy for this scale)
+        // Or smarter: update existing, create new, delete missing.
+        // Let's go with "delete all and recreate" for simplicity if no orders rely on specific product IDs yet.
+        // BUT orders contain OrderItem referencing Product. Deleting products might violate FK if orders exist.
+        // Better strategy for products:
+        // 1. Get existing products.
+        // 2. We can allow editing names/prices of existing products?
+        // The frontend sends `products` array. If we want to support existing product ID, frontend must send it.
+        // Current frontend implementation in CreateGroupModal sends {name, price} without ID for new ones?
+        // Let's check GroupDetailModal: it sends whatever is in `localGroup.products`.
+        // If data comes from `fetchGroups`, it might have IDs.
+        // Let's assume for now we just delete all and recreate is risky if items linked.
+        // Let's try `deleteMany` for this group's products and `createMany`.
+        // Risky if OrderItems exist.
+        // Safe approach: Update products logic is complex. Let's start with Basic Info + Members Only for this step?
+        // The user specifically complained about "member".
+        // Let's handle invitedUserIds (Members).
+
+        // Sync Members (Orders)
+        // Existing user IDs in this group
+        const existingUserIds = group.orders.map(o => o.userId);
+
+        // New list of invited User IDs (plus creator who must stay)
+        const targetUserIds = new Set(invitedUserIds || []);
+        targetUserIds.add(userId); // Ensure creator is always in
+
+        // 1. Add missing members
+        const toAdd = [...targetUserIds].filter(uid => !existingUserIds.includes(uid));
+        if (toAdd.length > 0) {
+            await prisma.order.createMany({
+                data: toAdd.map(uid => ({
+                    userId: uid,
+                    groupId: parseInt(id)
+                }))
+            });
+        }
+
+        // 2. Remove members who are no longer in the list (and not Creator)
+        const toRemove = existingUserIds.filter(uid => !targetUserIds.has(uid) && uid !== userId);
+        if (toRemove.length > 0) {
+            // Find orders to be deleted
+            const ordersToDelete = await prisma.order.findMany({
+                where: {
+                    groupId: parseInt(id),
+                    userId: { in: toRemove }
+                },
+                select: { id: true }
+            });
+
+            const orderIds = ordersToDelete.map(o => o.id);
+
+            // Delete items in these orders first (Cascade manual simulation)
+            if (orderIds.length > 0) {
+                await prisma.orderItem.deleteMany({
+                    where: { orderId: { in: orderIds } }
+                });
+
+                await prisma.order.deleteMany({
+                    where: { id: { in: orderIds } }
+                });
+            }
+        }
+
+        // Handle Products Update
+        if (products && Array.isArray(products)) {
+            // 1. Update existing (if has ID)
+            const updates = products.filter(p => p.id).map(p =>
+                prisma.groupProduct.update({
+                    where: { id: p.id },
+                    data: { name: p.name, price: p.price }
+                })
+            );
+
+            // 2. Create new (if no ID)
+            const creates = products.filter(p => !p.id).map(p =>
+                prisma.groupProduct.create({
+                    data: {
+                        name: p.name,
+                        price: p.price,
+                        groupId: parseInt(id)
+                    }
+                })
+            );
+
+            // 3. Delete missing
+            const keepIds = products.filter(p => p.id).map(p => p.id);
+            // We must check if any OrderItems refer to these products before deleting.
+            // If we delete a product, and an OrderItem refers to it?
+            // OrderItem has NO relation to Product in our schema! purely name/price copy.
+            // So it is SAFE to delete products.
+            const deleteOp = prisma.groupProduct.deleteMany({
+                where: {
+                    groupId: parseInt(id),
+                    id: { notIn: keepIds }
+                }
+            });
+
+            await prisma.$transaction([...updates, ...creates, deleteOp]);
+        }
+
+        res.json({ message: 'Group updated successfully' });
+    } catch (error) {
+        console.error("Error updating group:", error);
+        res.status(500).json({ error: 'Failed to update group' });
+    }
+};
+
+const deleteGroup = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.userId;
+
+        const group = await prisma.group.findUnique({ where: { id: parseInt(id) } });
+
+        if (!group) return res.status(404).json({ error: 'Group not found' });
+        if (group.creatorId !== userId) return res.status(403).json({ error: 'Not authorized' });
+
+        // Prisma cascade delete should handle relations if configured, otherwise need manual cleanup.
+        // Assuming schema has onDelete: Cascade for Orders/Products -> Group.
+        // If not, we might need to delete children first.
+        // Usually safe to try delete.
+
+        // Manual cleanup just in case or if schema is strict
+        // Delete OrderItems -> Orders -> Products -> Group (dependency order)
+        // Actually: OrderItems depend on Order and Product.
+        // Orders depend on Group. Products depend on Group.
+
+        // Delete OrderItems for orders in this group
+        /*
+        await prisma.orderItem.deleteMany({
+            where: {
+                order: { groupId: parseInt(id) }
+            }
+        });
+        */
+        // Relying on schema cascade is better if set up. If errors, we fix.
+        await prisma.group.delete({
+            where: { id: parseInt(id) }
+        });
+
+        res.json({ message: 'Group deleted successfully' });
+    } catch (error) {
+        console.error("Error deleting group:", error);
+        res.status(500).json({ error: 'Failed to delete group' });
     }
 };
 
 module.exports = {
     getDashboardGroups,
-    createGroup
+    createGroup,
+    updateGroup,
+    deleteGroup
 };

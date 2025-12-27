@@ -46,11 +46,11 @@ model Group {
   // --- 關聯：這團有哪些訂單？ ---
   orders    Order[]
 
-  // ✨ 新增關聯：這團的菜單有哪些東西？
+  //  新增關聯：這團的菜單有哪些東西？
   products    GroupProduct[]
 }
 
-// ✨ 新增：團購可選品項 (這就是菜單！)
+// 新增：團購可選品項 (這就是菜單！)
 model GroupProduct {
   id       Int    @id @default(autoincrement())
   name     String // 品項名 (例如: "KFC 蛋塔")
@@ -80,6 +80,7 @@ model Order {
   paymentStatus String   @default("UNPAID")
   
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 }
 
 // 4. 訂單細項 (OrderItem) - 商品內容

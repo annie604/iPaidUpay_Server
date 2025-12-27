@@ -10,7 +10,10 @@ const authenticateToken = (req, res, next) => {
     if (token == null) return res.sendStatus(401); // No token present
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403); // Invalid token
+        if (err) {
+            console.error('JWT Verification Error:', err.message);
+            return res.sendStatus(403); // Invalid token
+        }
         req.user = user; // user payload: { userId, username, iat, exp }
         next();
     });
