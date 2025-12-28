@@ -13,6 +13,9 @@ router.post('/', authenticateToken, groupController.createGroup);
 // Update a group (Protected)
 router.put('/:id', authenticateToken, groupController.updateGroup);
 
+// Update group status (Protected)
+router.put('/:id/status', authenticateToken, groupController.updateGroupStatus);
+
 // Delete a group (Protected)
 router.delete('/:id', authenticateToken, groupController.deleteGroup);
 

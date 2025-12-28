@@ -292,14 +292,16 @@ const updateGroup = async (req, res) => {
                     });
                 }
 
-                // If safe, verify delete operation in transaction
+                // If safe, add delete operation
                 const deleteOp = prisma.groupProduct.deleteMany({
                     where: { id: { in: productsToDelete.map(p => p.id) } }
                 });
 
+                // Execute transaction including deletes + updates + creates
+                await prisma.$transaction([...updates, ...creates, deleteOp]);
+
             } else {
                 // No deletions, just updates and creates
-
                 // --- SYNC UPDATE LOGIC START ---
                 // Detect updates where name or price changed, and propagate to OrderItems
 
@@ -432,9 +434,37 @@ const deleteGroup = async (req, res) => {
     }
 };
 
+const updateGroupStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body; // 'OPEN' or 'CLOSED'
+        const userId = req.user.userId;
+
+        if (!status || !['OPEN', 'CLOSED'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid status' });
+        }
+
+        const group = await prisma.group.findUnique({ where: { id: parseInt(id) } });
+
+        if (!group) return res.status(404).json({ error: 'Group not found' });
+        if (group.creatorId !== userId) return res.status(403).json({ error: 'Not authorized' });
+
+        const updatedGroup = await prisma.group.update({
+            where: { id: parseInt(id) },
+            data: { status }
+        });
+
+        res.json({ message: 'Group status updated', group: updatedGroup });
+    } catch (error) {
+        console.error("Error updating group status:", error);
+        res.status(500).json({ error: 'Failed to update group status' });
+    }
+};
+
 module.exports = {
     getDashboardGroups,
     createGroup,
     updateGroup,
-    deleteGroup
+    deleteGroup,
+    updateGroupStatus
 };
