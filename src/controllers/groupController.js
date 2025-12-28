@@ -379,15 +379,50 @@ const deleteGroup = async (req, res) => {
             }
         });
         */
-        // Relying on schema cascade is better if set up. If errors, we fix.
-        await prisma.group.delete({
-            where: { id: parseInt(id) }
+        // Check if all members have paid
+        const unpaidOrders = await prisma.order.findFirst({
+            where: {
+                groupId: parseInt(id),
+                paymentStatus: 'UNPAID'
+            }
         });
+
+        if (unpaidOrders) {
+            return res.status(400).json({ error: 'Cannot delete group: Some members have not paid.' });
+        }
+
+        // Manual Cascade Delete process to handle Foreign Key constraints
+        const groupOrders = await prisma.order.findMany({
+            where: { groupId: parseInt(id) },
+            select: { id: true }
+        });
+        const orderIds = groupOrders.map(o => o.id);
+
+        // Execute deletions in a transaction to ensure integrity
+        await prisma.$transaction([
+            // 1. Delete Order Items
+            prisma.orderItem.deleteMany({
+                where: { orderId: { in: orderIds } }
+            }),
+            // 2. Delete Orders
+            prisma.order.deleteMany({
+                where: { groupId: parseInt(id) }
+            }),
+            // 3. Delete Group Products
+            prisma.groupProduct.deleteMany({
+                where: { groupId: parseInt(id) }
+            }),
+            // 4. Delete the Group itself
+            prisma.group.delete({
+                where: { id: parseInt(id) }
+            })
+        ]);
 
         res.json({ message: 'Group deleted successfully' });
     } catch (error) {
         console.error("Error deleting group:", error);
-        res.status(500).json({ error: 'Failed to delete group' });
+        // Provide more detailed error info if possible
+        res.status(500).json({ error: 'Failed to delete group', details: error.message });
     }
 };
 
