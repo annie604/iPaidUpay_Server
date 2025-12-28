@@ -6,6 +6,12 @@ const getDashboardGroups = async (req, res) => {
         const userId = req.user.userId;
 
         const groups = await prisma.group.findMany({
+            where: {
+                OR: [
+                    { creatorId: userId },
+                    { orders: { some: { userId: userId } } }
+                ]
+            },
             include: {
                 creator: {
                     select: { id: true, name: true }
