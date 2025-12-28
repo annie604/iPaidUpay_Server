@@ -119,6 +119,7 @@ const createGroup = async (req, res) => {
                     create: [
                         {
                             userId: userId,
+                            paymentStatus: 'PAID', // Creator is always PAID by default
                             // Create items for the creator's initial order if provided
                             items: initialOrder && initialOrder.length > 0 ? {
                                 create: initialOrder.map(io => ({

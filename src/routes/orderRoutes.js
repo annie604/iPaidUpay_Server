@@ -10,4 +10,7 @@ router.post('/', authenticateToken, orderController.updateOrder);
 // Get group summary with all orders and statistics
 router.get('/group/:groupId/summary', authenticateToken, orderController.getGroupSummary);
 
+// Update payment status (Creator only)
+router.put('/:orderId/payment-status', authenticateToken, orderController.updatePaymentStatus);
+
 module.exports = router;

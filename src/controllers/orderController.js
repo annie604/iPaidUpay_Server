@@ -154,7 +154,7 @@ const getGroupSummary = async (req, res) => {
         if (myOrder) {
             const myTotal = myOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
             const myItemsSummary = myOrder.items.map(i => `${i.name}*${i.quantity}`).join(', ');
-            
+
             myOrderData = {
                 id: myOrder.id,
                 items: myOrder.items,
@@ -194,7 +194,49 @@ const getGroupSummary = async (req, res) => {
     }
 };
 
+// Update payment status (Creator Only)
+const updatePaymentStatus = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { orderId } = req.params;
+        const { status } = req.body; // "PAID" or "UNPAID"
+
+        if (!['PAID', 'UNPAID'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid status. Must be PAID or UNPAID.' });
+        }
+
+        // Verify that the requester is the creator of the group associated with this order
+        const order = await prisma.order.findUnique({
+            where: { id: parseInt(orderId) },
+            include: { group: true }
+        });
+
+        if (!order) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        if (order.group.creatorId !== userId) {
+            return res.status(403).json({ error: 'Only group creator can update payment status' });
+        }
+
+        const updatedOrder = await prisma.order.update({
+            where: { id: parseInt(orderId) },
+            data: { paymentStatus: status }
+        });
+
+        res.json({
+            message: 'Payment status updated',
+            paymentStatus: updatedOrder.paymentStatus
+        });
+
+    } catch (error) {
+        console.error("Error updating payment status:", error);
+        res.status(500).json({ error: 'Failed to update payment status' });
+    }
+};
+
 module.exports = {
     updateOrder,
-    getGroupSummary
+    getGroupSummary,
+    updatePaymentStatus
 };
