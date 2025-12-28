@@ -1,5 +1,19 @@
 version: '3.8'
+
 services:
+  server:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/IpaidUpay
+      - JWT_SECRET=your_jwt_secret_key_change_this_in_production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+
   postgres:
     image: postgres:15
     ports:
@@ -10,6 +24,11 @@ services:
       - POSTGRES_DB=IpaidUpay
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
