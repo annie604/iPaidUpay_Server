@@ -25,14 +25,15 @@ const updateOrder = async (req, res) => {
             return res.status(403).json({ error: 'Access denied to this group' });
         }
 
-        // Check if group is closed or expired
+        // Check if group is closed
         if (group.status === 'CLOSED') {
             return res.status(400).json({ error: 'Group is closed. Cannot update order.' });
         }
 
-        if (group.endTime && new Date() > new Date(group.endTime)) {
-            return res.status(400).json({ error: 'Group deadline has passed. Cannot update order.' });
-        }
+        // Deadline check removed to align with "Manual Open" overriding time.
+        // if (group.endTime && new Date() > new Date(group.endTime)) {
+        //    return res.status(400).json({ error: 'Group deadline has passed. Cannot update order.' });
+        // }
 
         // 1. Find or Create the Order for this User + Group
         let order = await prisma.order.findFirst({
