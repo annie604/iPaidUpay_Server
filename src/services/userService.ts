@@ -1,4 +1,5 @@
-const { PrismaClient } = require('@prisma/client');
+import { PrismaClient, User } from '@prisma/client';
+
 const prisma = new PrismaClient();
 
 /**
@@ -8,11 +9,11 @@ class UserService {
 
     /**
      * Search users by name or ID.
-     * @param {number} userId - Requesting user ID (to exclude self).
-     * @param {string} query - Search string.
-     * @returns {Promise<Array>}
+     * @param userId - Requesting user ID (to exclude self).
+     * @param query - Search string.
+     * @returns List of found users
      */
-    async searchUsers(userId, query) {
+    async searchUsers(userId: number, query: string): Promise<Partial<User>[]> {
         if (!query) throw new Error('Query parameter "q" is required');
 
         const users = await prisma.user.findMany({
@@ -34,12 +35,13 @@ class UserService {
         });
 
         // Exact ID match check
-        if (!isNaN(query)) {
+        if (!isNaN(Number(query))) {
             const idUser = await prisma.user.findUnique({
                 where: { id: parseInt(query) },
                 select: { id: true, username: true, name: true }
             });
             if (idUser && idUser.id !== userId) {
+                // Check if already in list
                 if (!users.find(u => u.id === idUser.id)) {
                     users.unshift(idUser);
                 }
@@ -51,11 +53,10 @@ class UserService {
 
     /**
      * Adds a friend (bidirectional).
-     * @param {number} userId 
-     * @param {number} friendId 
-     * @returns {Promise<void>}
+     * @param userId 
+     * @param friendId 
      */
-    async addFriend(userId, friendId) {
+    async addFriend(userId: number, friendId: number): Promise<void> {
         if (!friendId) throw new Error('friendId is required');
         if (userId === friendId) throw new Error('Cannot add self as friend');
 
@@ -89,10 +90,10 @@ class UserService {
 
     /**
      * Get user's friend list.
-     * @param {number} userId 
-     * @returns {Promise<Array>}
+     * @param userId 
+     * @returns List of friends
      */
-    async getFriends(userId) {
+    async getFriends(userId: number): Promise<{ id: number; username: string; name: string | null }[]> {
         const user = await prisma.user.findUnique({
             where: { id: userId },
             include: {
@@ -110,4 +111,4 @@ class UserService {
     }
 }
 
-module.exports = new UserService();
+export default new UserService();

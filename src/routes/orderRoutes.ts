@@ -1,7 +1,8 @@
-const express = require('express');
+import express from 'express';
+import * as orderController from '../controllers/orderController';
+import authenticateToken from '../middleware/authMiddleware';
+
 const router = express.Router();
-const orderController = require('../controllers/orderController');
-const authenticateToken = require('../middleware/authMiddleware');
 
 // Update order for a group (Create/Update logic)
 // POST because we are "submitting" an order form, logically implies updating the User's single order tuple for this group.
@@ -13,4 +14,4 @@ router.get('/group/:groupId/summary', authenticateToken, orderController.getGrou
 // Update payment status (Creator only)
 router.put('/:orderId/payment-status', authenticateToken, orderController.updatePaymentStatus);
 
-module.exports = router;
+export default router;

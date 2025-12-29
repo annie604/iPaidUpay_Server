@@ -1,5 +1,15 @@
-const { PrismaClient } = require('@prisma/client');
+import { PrismaClient, Group, GroupProduct, Order, OrderItem } from '@prisma/client';
+
 const prisma = new PrismaClient();
+
+interface GroupData {
+    title: string;
+    startTime: string | Date;
+    endTime: string | Date;
+    products: { id?: number; name: string; price: number }[];
+    invitedUserIds?: number[];
+    initialOrder?: { name: string; price: number; quantity: number }[];
+}
 
 /**
  * Service for Group management.
@@ -7,10 +17,10 @@ const prisma = new PrismaClient();
 class GroupService {
     /**
      * Retrieves all groups relevant to the dashboard for the current user.
-     * @param {number} userId - The ID of the requesting user.
-     * @returns {Promise<Array>} - Formatted list of groups.
+     * @param userId - The ID of the requesting user.
+     * @returns Formatted list of groups.
      */
-    async getDashboardGroups(userId) {
+    async getDashboardGroups(userId: number) {
         // Fetch groups where user is creator OR has at least one order
         const groups = await prisma.group.findMany({
             where: {
@@ -37,16 +47,16 @@ class GroupService {
         // Format and Aggregate data
         return groups.map(g => {
             let totalGroupAmount = 0;
-            const participantsSet = new Set();
+            const participantsSet = new Set<string | null>();
             let myOrder = null;
-            let invites = [];
+            let invites: { userId: number; name: string | null }[] = [];
 
             // Aggregation
-            const statsMap = {};
+            const statsMap: Record<string, { name: string; quantity: number; totalPrice: number }> = {};
 
             g.orders.forEach(o => {
                 participantsSet.add(o.user.name);
-                const orderSum = o.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                const orderSum = o.items.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
                 totalGroupAmount += orderSum;
 
                 if (o.userId === userId) {
@@ -62,7 +72,7 @@ class GroupService {
                         statsMap[item.name] = { name: item.name, quantity: 0, totalPrice: 0 };
                     }
                     statsMap[item.name].quantity += item.quantity;
-                    statsMap[item.name].totalPrice += (item.quantity * item.price);
+                    statsMap[item.name].totalPrice += (item.quantity * Number(item.price));
                 });
             });
 
@@ -70,8 +80,9 @@ class GroupService {
             let myTotal = 0;
 
             if (myOrder) {
-                myItemsSummary = myOrder.items.map(i => `${i.name}*${i.quantity}`).join(', ');
-                myTotal = myOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                const myOrderTyped = myOrder as (Order & { items: OrderItem[] });
+                myItemsSummary = myOrderTyped.items.map(i => `${i.name}*${i.quantity}`).join(', ');
+                myTotal = myOrderTyped.items.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
             }
 
             return {
@@ -87,12 +98,12 @@ class GroupService {
                 totalGroupAmount: totalGroupAmount,
                 orderStats: Object.values(statsMap),
                 myOrder: myOrder ? {
-                    id: myOrder.id,
+                    id: (myOrder as Order).id,
                     itemsSummary: myItemsSummary,
                     total: myTotal,
-                    items: myOrder.items,
-                    paymentStatus: myOrder.paymentStatus,
-                    updatedAt: myOrder.updatedAt
+                    items: (myOrder as (Order & { items: OrderItem[] })).items,
+                    paymentStatus: (myOrder as Order).paymentStatus,
+                    updatedAt: (myOrder as Order).updatedAt
                 } : null,
                 isCreator: g.creatorId === userId
             };
@@ -101,11 +112,11 @@ class GroupService {
 
     /**
      * Creates a new group.
-     * @param {number} userId - Creator's ID.
-     * @param {Object} data - Group data (title, startTime, endTime, products, invitedUserIds, initialOrder).
-     * @returns {Promise<Object>} - The created group.
+     * @param userId - Creator's ID.
+     * @param data - Group data (title, startTime, endTime, products, invitedUserIds, initialOrder).
+     * @returns The created group.
      */
-    async createGroup(userId, data) {
+    async createGroup(userId: number, data: GroupData) {
         const { title, startTime, endTime, products, invitedUserIds, initialOrder } = data;
 
         return await prisma.group.create({
@@ -116,7 +127,10 @@ class GroupService {
                 creatorId: userId,
                 status: 'OPEN',
                 products: {
-                    create: products // Expects array of { name, price }
+                    create: products.map(p => ({
+                        name: p.name,
+                        price: Number(p.price)
+                    }))
                 },
                 orders: {
                     create: [
@@ -147,12 +161,12 @@ class GroupService {
 
     /**
      * Updates an existing group.
-     * @param {number} userId - Requesting user ID.
-     * @param {number} groupId - Group ID.
-     * @param {Object} data - Update data (title, dates, products, invitedUserIds).
-     * @returns {Promise<Object>} - Result message and updated products.
+     * @param userId - Requesting user ID.
+     * @param groupId - Group ID.
+     * @param data - Update data (title, dates, products, invitedUserIds).
+     * @returns Result message and updated products.
      */
-    async updateGroup(userId, groupId, data) {
+    async updateGroup(userId: number, groupId: number, data: GroupData) {
         const { title, startTime, endTime, products, invitedUserIds } = data;
 
         // Verify group existence and ownership
@@ -213,17 +227,17 @@ class GroupService {
             const updates = products.filter(p => p.id).map(p =>
                 prisma.groupProduct.update({
                     where: { id: p.id },
-                    data: { name: p.name, price: p.price }
+                    data: { name: p.name, price: Number(p.price) }
                 })
             );
 
             const creates = products.filter(p => !p.id).map(p =>
                 prisma.groupProduct.create({
-                    data: { name: p.name, price: p.price, groupId: groupId }
+                    data: { name: p.name, price: Number(p.price), groupId: groupId }
                 })
             );
 
-            const keepIds = products.filter(p => p.id).map(p => p.id);
+            const keepIds = products.filter(p => p.id).map(p => p.id as number);
             const productsToDelete = await prisma.groupProduct.findMany({
                 where: { groupId: groupId, id: { notIn: keepIds } }
             });
@@ -253,11 +267,11 @@ class GroupService {
                 for (const newProd of products) {
                     if (newProd.id) {
                         const oldProd = existingProducts.find(p => p.id === newProd.id);
-                        if (oldProd && (oldProd.name !== newProd.name || oldProd.price !== newProd.price)) {
+                        if (oldProd && (oldProd.name !== newProd.name || Number(oldProd.price) !== Number(newProd.price))) {
                             syncOps.push(
                                 prisma.orderItem.updateMany({
                                     where: { order: { groupId: groupId }, name: oldProd.name },
-                                    data: { name: newProd.name, price: newProd.price }
+                                    data: { name: newProd.name, price: Number(newProd.price) }
                                 })
                             );
                         }
@@ -272,10 +286,10 @@ class GroupService {
 
     /**
      * Deletes a group.
-     * @param {number} userId 
-     * @param {number} groupId 
+     * @param userId 
+     * @param groupId 
      */
-    async deleteGroup(userId, groupId) {
+    async deleteGroup(userId: number, groupId: number) {
         const group = await prisma.group.findUnique({ where: { id: groupId } });
         if (!group) throw new Error('Group not found');
         if (group.creatorId !== userId) throw new Error('Not authorized');
@@ -298,11 +312,11 @@ class GroupService {
 
     /**
      * Updates group status.
-     * @param {number} userId 
-     * @param {number} groupId 
-     * @param {string} status 
+     * @param userId 
+     * @param groupId 
+     * @param status 
      */
-    async updateGroupStatus(userId, groupId, status) {
+    async updateGroupStatus(userId: number, groupId: number, status: string) {
         if (!['OPEN', 'CLOSED'].includes(status)) throw new Error('Invalid status');
 
         const group = await prisma.group.findUnique({ where: { id: groupId } });
@@ -316,4 +330,4 @@ class GroupService {
     }
 }
 
-module.exports = new GroupService();
+export default new GroupService();

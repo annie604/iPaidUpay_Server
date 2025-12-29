@@ -18,6 +18,17 @@ IpaidUpay Server is the backend REST API for the group buying application. It ha
 - **ORM**: Prisma
 - **Containerization**: Docker
 
+## Project Structure
+
+```
+src/
+├── controllers/  # Request logic and responses
+├── middleware/   # Auth and error handling middleware
+├── routes/       # API route definitions
+├── utils/        # Helper functions (JWT, etc.)
+└── index.ts      # App entry point
+```
+
 ## Environment Setup (.env)
 
 Create a `.env` file in the root directory with the following variables:

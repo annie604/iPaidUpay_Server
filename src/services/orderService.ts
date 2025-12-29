@@ -1,5 +1,12 @@
-const { PrismaClient } = require('@prisma/client');
+import { PrismaClient, Order } from '@prisma/client';
+
 const prisma = new PrismaClient();
+
+interface OrderItemInput {
+    name: string;
+    price: number | string;
+    quantity: number | string;
+}
 
 /**
  * Service for Order management.
@@ -8,12 +15,12 @@ class OrderService {
 
     /**
      * Updates (or creates) an order for a user in a group.
-     * @param {number} userId 
-     * @param {number} groupId 
-     * @param {Array} items - Array of { name, price, quantity }
-     * @returns {Promise<Object>} - Updated order details.
+     * @param userId 
+     * @param groupId 
+     * @param items - Array of { name, price, quantity }
+     * @returns Updated order details.
      */
-    async updateOrder(userId, groupId, items) {
+    async updateOrder(userId: number, groupId: number, items: OrderItemInput[]) {
         if (!groupId) throw new Error('Group ID is required');
 
         // Validation
@@ -70,8 +77,10 @@ class OrderService {
             include: { items: true }
         });
 
+        if (!updatedOrder) throw new Error("Failed to retrieve updated order");
+
         // Format
-        const total = updatedOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const total = updatedOrder.items.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
         const itemsSummary = updatedOrder.items.map(i => `${i.name}*${i.quantity}`).join(', ');
 
         return {
@@ -85,11 +94,11 @@ class OrderService {
 
     /**
      * Retrieves detailed group summary.
-     * @param {number} userId 
-     * @param {number} groupId 
-     * @returns {Promise<Object>}
+     * @param userId 
+     * @param groupId 
+     * @returns 
      */
-    async getGroupSummary(userId, groupId) {
+    async getGroupSummary(userId: number, groupId: number) {
         const group = await prisma.group.findFirst({
             where: {
                 id: groupId,
@@ -114,12 +123,12 @@ class OrderService {
 
         // Stats Calculation
         let totalGroupAmount = 0;
-        const participantsSet = new Set();
-        const statsMap = {};
+        const participantsSet = new Set<string | null>();
+        const statsMap: Record<string, { name: string; quantity: number; totalPrice: number }> = {};
 
         group.orders.forEach(order => {
             participantsSet.add(order.user.name);
-            const orderSum = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            const orderSum = order.items.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
             totalGroupAmount += orderSum;
 
             order.items.forEach(item => {
@@ -127,7 +136,7 @@ class OrderService {
                     statsMap[item.name] = { name: item.name, quantity: 0, totalPrice: 0 };
                 }
                 statsMap[item.name].quantity += item.quantity;
-                statsMap[item.name].totalPrice += (item.quantity * item.price);
+                statsMap[item.name].totalPrice += (item.quantity * Number(item.price));
             });
         });
 
@@ -135,7 +144,7 @@ class OrderService {
         const myOrder = group.orders.find(order => order.userId === userId);
         let myOrderData = null;
         if (myOrder) {
-            const myTotal = myOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            const myTotal = myOrder.items.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
             const myItemsSummary = myOrder.items.map(i => `${i.name}*${i.quantity}`).join(', ');
 
             myOrderData = {
@@ -166,7 +175,7 @@ class OrderService {
                 userId: order.userId, // Include user ID
                 user: order.user,
                 items: order.items,
-                total: order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+                total: order.items.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0),
                 paymentStatus: order.paymentStatus,
                 updatedAt: order.updatedAt
             }))
@@ -175,12 +184,12 @@ class OrderService {
 
     /**
      * Updates payment status of an order.
-     * @param {number} userId - Requesting user (must be creator)
-     * @param {number} orderId 
-     * @param {string} status 
-     * @returns {Promise<Object>}
+     * @param userId - Requesting user (must be creator)
+     * @param orderId 
+     * @param status 
+     * @returns 
      */
-    async updatePaymentStatus(userId, orderId, status) {
+    async updatePaymentStatus(userId: number, orderId: number, status: string) {
         if (!['PAID', 'UNPAID'].includes(status)) {
             throw new Error('Invalid status. Must be PAID or UNPAID.');
         }
@@ -202,4 +211,4 @@ class OrderService {
     }
 }
 
-module.exports = new OrderService();
+export default new OrderService();

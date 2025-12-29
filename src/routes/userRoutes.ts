@@ -1,7 +1,8 @@
-const express = require('express');
+import express from 'express';
+import * as userController from '../controllers/userController';
+import authenticateToken from '../middleware/authMiddleware';
+
 const router = express.Router();
-const userController = require('../controllers/userController');
-const authenticateToken = require('../middleware/authMiddleware');
 
 // All routes require authentication
 router.use(authenticateToken);
@@ -10,4 +11,4 @@ router.get('/search', userController.searchUsers);
 router.get('/friends', userController.getFriends);
 router.post('/friends', userController.addFriend);
 
-module.exports = router;
+export default router;
