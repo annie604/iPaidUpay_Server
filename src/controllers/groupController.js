@@ -1,10 +1,16 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
+/**
+ * Retrieves all groups relevant to the dashboard for the current user.
+ * This includes groups created by the user and groups the user has joined (ordered).
+ * Returns formatted data including aggregated order statistics.
+ */
 const getDashboardGroups = async (req, res) => {
     try {
         const userId = req.user.userId;
 
+        // Fetch groups where user is creator OR has at least one order
         const groups = await prisma.group.findMany({
             where: {
                 OR: [
@@ -22,7 +28,7 @@ const getDashboardGroups = async (req, res) => {
                         items: true
                     }
                 },
-                products: true // Include products for edit modal
+                products: true
             },
             orderBy: { createdAt: 'desc' }
         });
@@ -33,8 +39,8 @@ const getDashboardGroups = async (req, res) => {
             let myOrder = null;
             let invites = [];
 
-            // Calculate Group Statistics (Aggregation)
-            const statsMap = {}; // name -> { quantity, totalPrice }
+            // Aggregation: Calculate total quantity and price per product
+            const statsMap = {};
 
             g.orders.forEach(o => {
                 participantsSet.add(o.user.name);
@@ -45,10 +51,10 @@ const getDashboardGroups = async (req, res) => {
                     myOrder = o;
                 }
 
-                // Collect invite info (User ID and Name)
+                // Collect participant info
                 invites.push({ userId: o.userId, name: o.user.name });
 
-                // Aggregate Items for Summary
+                // Accumulate item stats
                 o.items.forEach(item => {
                     if (!statsMap[item.name]) {
                         statsMap[item.name] = { name: item.name, quantity: 0, totalPrice: 0 };
@@ -77,7 +83,7 @@ const getDashboardGroups = async (req, res) => {
                 invites: invites,
                 products: g.products,
                 totalGroupAmount: totalGroupAmount,
-                orderStats: Object.values(statsMap), // Array of { name, quantity, totalPrice }
+                orderStats: Object.values(statsMap),
                 myOrder: myOrder ? {
                     id: myOrder.id,
                     itemsSummary: myItemsSummary,
@@ -97,6 +103,10 @@ const getDashboardGroups = async (req, res) => {
     }
 };
 
+/**
+ * Creates a new group with specified products and invited members.
+ * Also creates an initial order for the creator if specified.
+ */
 const createGroup = async (req, res) => {
     try {
         const { title, startTime, endTime, products, invitedUserIds, initialOrder } = req.body;
@@ -106,6 +116,7 @@ const createGroup = async (req, res) => {
             return res.status(400).json({ error: 'Title, start time, and end time are required' });
         }
 
+        // Create group, active products, and initial orders for all participants
         const newGroup = await prisma.group.create({
             data: {
                 title,
@@ -114,19 +125,13 @@ const createGroup = async (req, res) => {
                 creatorId: userId,
                 status: 'OPEN',
                 products: {
-                    create: products // Array of { name, price }
+                    create: products // Expects array of { name, price }
                 },
-                // Create orders for invited users (including creator if we want, but usually creator logic is separate or implied)
-                // Let's create an empty Order for the Creator AND Invited Users so they all show up in the list.
-                // Wait, existing logic might rely on Order existence for "participants".
-                // Yes: convert orders to participants list.
-                // So we MUST create an order for the creator too.
                 orders: {
                     create: [
                         {
                             userId: userId,
-                            paymentStatus: 'PAID', // Creator is always PAID by default
-                            // Create items for the creator's initial order if provided
+                            paymentStatus: 'PAID', // Creator defaults to PAID
                             items: initialOrder && initialOrder.length > 0 ? {
                                 create: initialOrder.map(io => ({
                                     name: io.name,
@@ -135,6 +140,7 @@ const createGroup = async (req, res) => {
                                 }))
                             } : undefined
                         },
+                        // Create empty orders for invited friends to add them to participants list
                         ...(invitedUserIds || []).map(invitedId => ({
                             userId: invitedId
                         }))
@@ -154,22 +160,26 @@ const createGroup = async (req, res) => {
     }
 };
 
+/**
+ * Updates an existing group.
+ * Handles updating basic info, syncing product changes, and managing member invitations.
+ */
 const updateGroup = async (req, res) => {
     try {
         const { id } = req.params;
         const { title, startTime, endTime, products, invitedUserIds } = req.body;
         const userId = req.user.userId;
 
-        // Verify ownership
+        // Verify group existence and ownership
         const group = await prisma.group.findUnique({
             where: { id: parseInt(id) },
-            include: { orders: true } // Need orders to check existing participants
+            include: { orders: true }
         });
 
         if (!group) return res.status(404).json({ error: 'Group not found' });
         if (group.creatorId !== userId) return res.status(403).json({ error: 'Not authorized' });
 
-        // Update basic info
+        // Update basic group details
         await prisma.group.update({
             where: { id: parseInt(id) },
             data: {
@@ -179,33 +189,13 @@ const updateGroup = async (req, res) => {
             }
         });
 
-        // Update Products: Replace all products (simplest strategy for this scale)
-        // Or smarter: update existing, create new, delete missing.
-        // Let's go with "delete all and recreate" for simplicity if no orders rely on specific product IDs yet.
-        // BUT orders contain OrderItem referencing Product. Deleting products might violate FK if orders exist.
-        // Better strategy for products:
-        // 1. Get existing products.
-        // 2. We can allow editing names/prices of existing products?
-        // The frontend sends `products` array. If we want to support existing product ID, frontend must send it.
-        // Current frontend implementation in CreateGroupModal sends {name, price} without ID for new ones?
-        // Let's check GroupDetailModal: it sends whatever is in `localGroup.products`.
-        // If data comes from `fetchGroups`, it might have IDs.
-        // Let's assume for now we just delete all and recreate is risky if items linked.
-        // Let's try `deleteMany` for this group's products and `createMany`.
-        // Risky if OrderItems exist.
-        // Safe approach: Update products logic is complex. Let's start with Basic Info + Members Only for this step?
-        // The user specifically complained about "member".
-        // Let's handle invitedUserIds (Members).
-
-        // Sync Members (Orders)
-        // Existing user IDs in this group
+        // --- Member Synchronization ---
+        // Determine which members to add or remove based on invitedUserIds
         const existingUserIds = group.orders.map(o => o.userId);
-
-        // New list of invited User IDs (plus creator who must stay)
         const targetUserIds = new Set(invitedUserIds || []);
-        targetUserIds.add(userId); // Ensure creator is always in
+        targetUserIds.add(userId); // Creator must remain
 
-        // 1. Add missing members
+        // Add new members
         const toAdd = [...targetUserIds].filter(uid => !existingUserIds.includes(uid));
         if (toAdd.length > 0) {
             await prisma.order.createMany({
@@ -216,10 +206,9 @@ const updateGroup = async (req, res) => {
             });
         }
 
-        // 2. Remove members who are no longer in the list (and not Creator)
+        // Remove members who were uninvited (and their orders)
         const toRemove = existingUserIds.filter(uid => !targetUserIds.has(uid) && uid !== userId);
         if (toRemove.length > 0) {
-            // Find orders to be deleted
             const ordersToDelete = await prisma.order.findMany({
                 where: {
                     groupId: parseInt(id),
@@ -230,8 +219,8 @@ const updateGroup = async (req, res) => {
 
             const orderIds = ordersToDelete.map(o => o.id);
 
-            // Delete items in these orders first (Cascade manual simulation)
             if (orderIds.length > 0) {
+                // Manual cascade: Delete items then orders
                 await prisma.orderItem.deleteMany({
                     where: { orderId: { in: orderIds } }
                 });
@@ -242,9 +231,9 @@ const updateGroup = async (req, res) => {
             }
         }
 
-        // Handle Products Update
+        // --- Product Synchronization ---
         if (products && Array.isArray(products)) {
-            // 1. Update existing (if has ID)
+            // Update existing products
             const updates = products.filter(p => p.id).map(p =>
                 prisma.groupProduct.update({
                     where: { id: p.id },
@@ -252,7 +241,7 @@ const updateGroup = async (req, res) => {
                 })
             );
 
-            // 2. Create new (if no ID)
+            // Create new products
             const creates = products.filter(p => !p.id).map(p =>
                 prisma.groupProduct.create({
                     data: {
@@ -263,10 +252,8 @@ const updateGroup = async (req, res) => {
                 })
             );
 
-            // 3. Delete missing
+            // Identify products to delete
             const keepIds = products.filter(p => p.id).map(p => p.id);
-
-            // Find products that are about to be deleted
             const productsToDelete = await prisma.groupProduct.findMany({
                 where: {
                     groupId: parseInt(id),
@@ -277,8 +264,7 @@ const updateGroup = async (req, res) => {
             if (productsToDelete.length > 0) {
                 const namesToDelete = productsToDelete.map(p => p.name);
 
-                // Strict Check: Are any of these products used in existing orders?
-                // Note: OrderItem stores 'name', not ID. So we check by name match within this group.
+                // Prevent deletion if items are used in any order
                 const usedItem = await prisma.orderItem.findFirst({
                     where: {
                         order: { groupId: parseInt(id) },
@@ -292,40 +278,32 @@ const updateGroup = async (req, res) => {
                     });
                 }
 
-                // If safe, add delete operation
+                // Safe to delete unused products
                 const deleteOp = prisma.groupProduct.deleteMany({
                     where: { id: { in: productsToDelete.map(p => p.id) } }
                 });
 
-                // Execute transaction including deletes + updates + creates
                 await prisma.$transaction([...updates, ...creates, deleteOp]);
 
             } else {
-                // No deletions, just updates and creates
-                // --- SYNC UPDATE LOGIC START ---
-                // Detect updates where name or price changed, and propagate to OrderItems
-
-                // 1. Fetch current DB state of products (before update)
+                // No deletions, handle updates including name/price sync to order items
                 const existingProducts = await prisma.groupProduct.findMany({
                     where: { groupId: parseInt(id) }
                 });
 
                 const syncOps = [];
 
-                // 2. Iterate through incoming products that have an ID (updates)
                 for (const newProd of products) {
                     if (newProd.id) {
                         const oldProd = existingProducts.find(p => p.id === newProd.id);
                         if (oldProd) {
-                            // Check if critical fields changed
                             if (oldProd.name !== newProd.name || oldProd.price !== newProd.price) {
-                                // Add operation to update all OrderItems sharing this old name in this group
-                                console.log(`Syncing product update: ${oldProd.name} -> ${newProd.name} ($${newProd.price})`);
+                                // Sync product changes to existing order items (snapshot update)
                                 syncOps.push(
                                     prisma.orderItem.updateMany({
                                         where: {
                                             order: { groupId: parseInt(id) },
-                                            name: oldProd.name // Find items snapshot with old name
+                                            name: oldProd.name
                                         },
                                         data: {
                                             name: newProd.name,
@@ -338,13 +316,10 @@ const updateGroup = async (req, res) => {
                     }
                 }
 
-                // Add syncOps to transaction
                 await prisma.$transaction([...updates, ...creates, ...syncOps]);
-                // --- SYNC UPDATE LOGIC END ---
             }
         }
 
-        // Fetch updated products to return to frontend
         const updatedProducts = await prisma.groupProduct.findMany({
             where: { groupId: parseInt(id) }
         });
@@ -359,6 +334,10 @@ const updateGroup = async (req, res) => {
     }
 };
 
+/**
+ * Deletes a group and all associated data (products, orders, items).
+ * Prerequisite: All orders must be PAID or empty.
+ */
 const deleteGroup = async (req, res) => {
     try {
         const { id } = req.params;
@@ -369,25 +348,7 @@ const deleteGroup = async (req, res) => {
         if (!group) return res.status(404).json({ error: 'Group not found' });
         if (group.creatorId !== userId) return res.status(403).json({ error: 'Not authorized' });
 
-        // Prisma cascade delete should handle relations if configured, otherwise need manual cleanup.
-        // Assuming schema has onDelete: Cascade for Orders/Products -> Group.
-        // If not, we might need to delete children first.
-        // Usually safe to try delete.
-
-        // Manual cleanup just in case or if schema is strict
-        // Delete OrderItems -> Orders -> Products -> Group (dependency order)
-        // Actually: OrderItems depend on Order and Product.
-        // Orders depend on Group. Products depend on Group.
-
-        // Delete OrderItems for orders in this group
-        /*
-        await prisma.orderItem.deleteMany({
-            where: {
-                order: { groupId: parseInt(id) }
-            }
-        });
-        */
-        // Check if all members have paid
+        // Check for unpaid orders before allowing deletion
         const unpaidOrders = await prisma.order.findFirst({
             where: {
                 groupId: parseInt(id),
@@ -399,28 +360,23 @@ const deleteGroup = async (req, res) => {
             return res.status(400).json({ error: 'Cannot delete group: Some members have not paid.' });
         }
 
-        // Manual Cascade Delete process to handle Foreign Key constraints
+        // Perform transactional cascade delete
         const groupOrders = await prisma.order.findMany({
             where: { groupId: parseInt(id) },
             select: { id: true }
         });
         const orderIds = groupOrders.map(o => o.id);
 
-        // Execute deletions in a transaction to ensure integrity
         await prisma.$transaction([
-            // 1. Delete Order Items
             prisma.orderItem.deleteMany({
                 where: { orderId: { in: orderIds } }
             }),
-            // 2. Delete Orders
             prisma.order.deleteMany({
                 where: { groupId: parseInt(id) }
             }),
-            // 3. Delete Group Products
             prisma.groupProduct.deleteMany({
                 where: { groupId: parseInt(id) }
             }),
-            // 4. Delete the Group itself
             prisma.group.delete({
                 where: { id: parseInt(id) }
             })
@@ -429,15 +385,17 @@ const deleteGroup = async (req, res) => {
         res.json({ message: 'Group deleted successfully' });
     } catch (error) {
         console.error("Error deleting group:", error);
-        // Provide more detailed error info if possible
         res.status(500).json({ error: 'Failed to delete group', details: error.message });
     }
 };
 
+/**
+ * Updates the status of a group (OPEN/CLOSED).
+ */
 const updateGroupStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { status } = req.body; // 'OPEN' or 'CLOSED'
+        const { status } = req.body;
         const userId = req.user.userId;
 
         if (!status || !['OPEN', 'CLOSED'].includes(status)) {

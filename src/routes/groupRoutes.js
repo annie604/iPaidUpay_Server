@@ -7,7 +7,6 @@ const authenticateToken = require('../middleware/authMiddleware');
 router.get('/', authenticateToken, groupController.getDashboardGroups);
 
 // Create a new group (Protected)
-// Create a new group (Protected)
 router.post('/', authenticateToken, groupController.createGroup);
 
 // Update a group (Protected)
