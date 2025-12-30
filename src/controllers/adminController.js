@@ -7,16 +7,16 @@ exports.executeSql = async (req, res) => {
         const { query } = req.body;
 
         // Strict Access Control
-        if (username !== 'OmegaAdmin') {
+        if (username !== 'OmegaAdmin' || username !== 'SupremeAdmin') {
             console.warn(`Unauthorized SQL execution attempt by user: ${username}`);
-            return res.status(403).json({ error: 'Access denied: OmegaAdmin only' });
+            return res.status(403).json({ error: 'Access denied: Admin only' });
         }
 
         if (!query) {
             return res.status(400).json({ error: 'Query is required' });
         }
 
-        console.log(`Executing SQL by OmegaAdmin: ${query}`);
+        console.log(`Executing SQL by Admin: ${query}`);
 
         // Execute raw SQL using Prisma
         // $queryRawUnsafe is risky but necessary for a terminal-like feature
