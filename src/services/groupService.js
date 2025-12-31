@@ -230,10 +230,16 @@ class GroupService {
 
             if (productsToDelete.length > 0) {
                 const namesToDelete = productsToDelete.map(p => p.name);
+                const idsToDelete = productsToDelete.map(p => p.id);
+
+                // Check usage by ID or Name (for legacy data)
                 const usedItem = await prisma.orderItem.findFirst({
                     where: {
                         order: { groupId: groupId },
-                        name: { in: namesToDelete }
+                        OR: [
+                            { productId: { in: idsToDelete } },
+                            { name: { in: namesToDelete } }
+                        ]
                     }
                 });
 
@@ -248,16 +254,35 @@ class GroupService {
                 await prisma.$transaction([...updates, ...creates, deleteOp]);
             } else {
                 // Sync name/price updates to OrderItems
-                const existingProducts = await prisma.groupProduct.findMany({ where: { groupId } });
+                // STRATEGY: 
+                // 1. Update OrderItems linked by productId (Reliable)
+                // 2. Update OrderItems linked by Name (Legacy fallback)
+
                 const syncOps = [];
+                const existingProducts = await prisma.groupProduct.findMany({ where: { groupId } });
+
                 for (const newProd of products) {
                     if (newProd.id) {
                         const oldProd = existingProducts.find(p => p.id === newProd.id);
                         if (oldProd && (oldProd.name !== newProd.name || oldProd.price !== newProd.price)) {
+                            // Sync by ID (New Standard)
                             syncOps.push(
                                 prisma.orderItem.updateMany({
-                                    where: { order: { groupId: groupId }, name: oldProd.name },
+                                    where: { productId: newProd.id },
                                     data: { name: newProd.name, price: newProd.price }
+                                })
+                            );
+
+                            // Sync by Name (Legacy Support - only if productId is null)
+                            syncOps.push(
+                                prisma.orderItem.updateMany({
+                                    where: {
+                                        order: { groupId: groupId },
+                                        name: oldProd.name,
+                                        productId: null
+                                    },
+                                    data: { name: newProd.name, price: newProd.price, productId: newProd.id }
+                                    // Also auto-link legacy items to the product ID now!
                                 })
                             );
                         }

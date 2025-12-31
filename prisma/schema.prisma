@@ -59,6 +59,9 @@ model GroupProduct {
   // 屬於哪一團的菜單？
   groupId  Int
   group    Group  @relation(fields: [groupId], references: [id])
+
+  // --- 對應的訂單項目 ---
+  orderItems OrderItem[]
 }
 
 // 3. 個人訂單 (Order) - 連結 人 與 團
@@ -93,4 +96,8 @@ model OrderItem {
   // --- 關聯：屬於哪張單？ ---
   orderId  Int
   order    Order  @relation(fields: [orderId], references: [id])
+
+  // --- 關聯：對應哪個菜單品項？ (解決價格同步與冗餘問題) ---
+  productId Int?
+  product   GroupProduct? @relation(fields: [productId], references: [id])
 }

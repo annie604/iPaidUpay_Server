@@ -48,13 +48,43 @@ class OrderService {
             await tx.orderItem.deleteMany({ where: { orderId } });
 
             if (items && items.length > 0) {
+                // 1. Fetch current GroupProducts to get authoritative prices and IDs
+                const groupProducts = await tx.groupProduct.findMany({
+                    where: { groupId }
+                });
+
+                const newItems = items.map(inputItem => {
+                    // Try to match by ID first, then Name
+                    let product = null;
+                    if (inputItem.productId) {
+                        product = groupProducts.find(p => p.id === inputItem.productId);
+                    } else if (inputItem.name) {
+                        product = groupProducts.find(p => p.name === inputItem.name);
+                    }
+
+                    if (product) {
+                        return {
+                            orderId,
+                            name: product.name,
+                            price: Number(product.price), // Enforce verified price
+                            quantity: Number(inputItem.quantity),
+                            productId: product.id         // Link for future updates
+                        };
+                    } else {
+                        // Fallback for custom items (if allowed) or error
+                        // For now we allow custom items but warning: they won't auto-update
+                        return {
+                            orderId,
+                            name: inputItem.name,
+                            price: Number(inputItem.price),
+                            quantity: Number(inputItem.quantity),
+                            productId: null
+                        };
+                    }
+                });
+
                 await tx.orderItem.createMany({
-                    data: items.map(item => ({
-                        orderId,
-                        name: item.name,
-                        price: Number(item.price),
-                        quantity: Number(item.quantity)
-                    }))
+                    data: newItems
                 });
             }
 
