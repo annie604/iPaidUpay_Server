@@ -7,7 +7,8 @@ exports.executeSql = async (req, res) => {
         const { query } = req.body;
 
         // Strict Access Control
-        if (username !== 'OmegaAdmin' || username !== 'SupremeAdmin') {
+        // Strict Access Control
+        if (!['OmegaAdmin', 'SupremeAdmin'].includes(username)) {
             console.warn(`Unauthorized SQL execution attempt by user: ${username}`);
             return res.status(403).json({ error: 'Access denied: Admin only' });
         }
