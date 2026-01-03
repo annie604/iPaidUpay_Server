@@ -1,0 +1,86 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy iPaidUpay Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        env:
+          PORT: ${{ secrets.PORT }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          NODE_ENV: ${{ secrets.NODE_ENV }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT }}
+          envs: PORT,DATABASE_URL,JWT_SECRET,NODE_ENV,POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB
+          script: |
+            set -e
+
+            # 驗證環境變數
+            echo "PORT=${PORT}"
+            echo "NODE_ENV=${NODE_ENV}"
+            echo "POSTGRES_USER=${POSTGRES_USER}"
+
+            # 進入專案目錄
+            cd /home/ubuntu/iPaidUpay_Server
+
+            # 拉取最新代碼
+            git pull origin master
+
+            # 啟動資料庫
+            docker compose up -d postgres
+
+            # 等待資料庫就緒
+            echo "等待資料庫啟動..."
+            sleep 10
+
+            # 執行資料庫遷移
+            docker compose run --rm server npx prisma migrate deploy
+
+            # 重新建置並啟動 server
+            docker compose up -d --build --no-deps server
+
+            # 等待服務啟動
+            echo "等待服務啟動..."
+            sleep 15
+
+            # 健康檢查
+            if curl -f http://localhost:3001/api/health 2>/dev/null; then
+              echo "✅ 服務健康檢查通過"
+            else
+              echo "❌ 健康檢查失敗，顯示日誌："
+              docker compose logs --tail=50 server
+              exit 1
+            fi
+
+            # 清理未使用的映像
+            docker image prune -f
+
+            echo "🎉 部署完成"
+
+      - name: Deployment Success
+        if: success()
+        run: echo "✅ 部署成功！伺服器已更新"
+
+      - name: Deployment Failed
+        if: failure()
+        run: |
+          echo "❌ 部署失敗，請檢查 Actions 日誌"
+          exit 1
