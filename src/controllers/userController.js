@@ -23,13 +23,14 @@ const searchUsers = async (req, res) => {
 const addFriend = async (req, res) => {
     try {
         const userId = req.user.userId;
-        const friendId = parseInt(req.body.friendId);
+        // Helper to ensure friendId is treated as string
+        const friendId = String(req.body.friendId);
 
         if (!friendId) {
             return res.status(400).json({ error: 'friendId is required' });
         }
 
-        if (userId === parseInt(friendId)) {
+        if (userId === friendId) {
             return res.status(400).json({ error: 'Cannot add self as friend' });
         }
 

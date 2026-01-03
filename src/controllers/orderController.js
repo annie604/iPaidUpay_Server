@@ -5,7 +5,7 @@ const updateOrder = async (req, res) => {
         const userId = req.user.userId;
         const { groupId, items } = req.body;
 
-        const result = await orderService.updateOrder(userId, parseInt(groupId), items);
+        const result = await orderService.updateOrder(userId, groupId, items);
 
         res.json({
             message: 'Order updated successfully',
@@ -27,7 +27,7 @@ const getGroupSummary = async (req, res) => {
         const userId = req.user.userId;
         const { groupId } = req.params;
 
-        const summary = await orderService.getGroupSummary(userId, parseInt(groupId));
+        const summary = await orderService.getGroupSummary(userId, groupId);
 
         res.json(summary);
 
@@ -46,7 +46,7 @@ const updatePaymentStatus = async (req, res) => {
         const { orderId } = req.params;
         const { status } = req.body;
 
-        const result = await orderService.updatePaymentStatus(userId, parseInt(orderId), status);
+        const result = await orderService.updatePaymentStatus(userId, orderId, status);
 
         res.json({
             message: 'Payment status updated',

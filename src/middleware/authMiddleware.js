@@ -14,7 +14,14 @@ const authenticateToken = (req, res, next) => {
             console.error('JWT Verification Error:', err.message);
             return res.sendStatus(403); // Invalid token
         }
-        req.user = user; // user payload: { userId, username, iat, exp }
+        res.locals.user = user; // Optional: store in locals too if needed
+        req.user = user;
+
+        // Ensure userId is a string (handles legacy tokens issued before migration)
+        if (req.user.userId) {
+            req.user.userId = String(req.user.userId);
+        }
+
         next();
     });
 };
