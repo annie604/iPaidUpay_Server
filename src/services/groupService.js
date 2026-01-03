@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 class GroupService {
     /**
      * Retrieves all groups relevant to the dashboard for the current user.
-     * @param {number} userId - The ID of the requesting user.
+     * @param {string} userId - The ID of the requesting user.
      * @returns {Promise<Array>} - Formatted list of groups.
      */
     async getDashboardGroups(userId) {
@@ -101,7 +101,7 @@ class GroupService {
 
     /**
      * Creates a new group.
-     * @param {number} userId - Creator's ID.
+     * @param {string} userId - Creator's ID.
      * @param {Object} data - Group data (title, startTime, endTime, products, invitedUserIds, initialOrder).
      * @returns {Promise<Object>} - The created group.
      */
@@ -147,8 +147,8 @@ class GroupService {
 
     /**
      * Updates an existing group.
-     * @param {number} userId - Requesting user ID.
-     * @param {number} groupId - Group ID.
+     * @param {string} userId - Requesting user ID.
+     * @param {string} groupId - Group ID.
      * @param {Object} data - Update data (title, dates, products, invitedUserIds).
      * @returns {Promise<Object>} - Result message and updated products.
      */
@@ -297,8 +297,8 @@ class GroupService {
 
     /**
      * Deletes a group.
-     * @param {number} userId 
-     * @param {number} groupId 
+     * @param {string} userId 
+     * @param {string} groupId 
      */
     async deleteGroup(userId, groupId) {
         const group = await prisma.group.findUnique({ where: { id: groupId } });
@@ -323,8 +323,8 @@ class GroupService {
 
     /**
      * Updates group status.
-     * @param {number} userId 
-     * @param {number} groupId 
+     * @param {string} userId 
+     * @param {string} groupId 
      * @param {string} status 
      */
     async updateGroupStatus(userId, groupId, status) {

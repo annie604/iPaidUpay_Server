@@ -46,7 +46,7 @@ const updateGroup = async (req, res) => {
         const { id } = req.params;
         const userId = req.user.userId;
 
-        const updatedProducts = await groupService.updateGroup(userId, parseInt(id), req.body);
+        const updatedProducts = await groupService.updateGroup(userId, id, req.body);
 
         res.json({
             message: 'Group updated successfully',
@@ -71,7 +71,7 @@ const deleteGroup = async (req, res) => {
         const { id } = req.params;
         const userId = req.user.userId;
 
-        await groupService.deleteGroup(userId, parseInt(id));
+        await groupService.deleteGroup(userId, id);
 
         res.json({ message: 'Group deleted successfully' });
     } catch (error) {
@@ -93,7 +93,7 @@ const updateGroupStatus = async (req, res) => {
         const { status } = req.body;
         const userId = req.user.userId;
 
-        const updatedGroup = await groupService.updateGroupStatus(userId, parseInt(id), status);
+        const updatedGroup = await groupService.updateGroupStatus(userId, id, status);
 
         res.json({ message: 'Group status updated', group: updatedGroup });
     } catch (error) {

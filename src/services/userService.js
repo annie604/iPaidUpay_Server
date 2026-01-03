@@ -8,7 +8,7 @@ class UserService {
 
     /**
      * Search users by name or ID.
-     * @param {number} userId - Requesting user ID (to exclude self).
+     * @param {string} userId - Requesting user ID (to exclude self).
      * @param {string} query - Search string.
      * @returns {Promise<Array>}
      */
@@ -34,15 +34,18 @@ class UserService {
         });
 
         // Exact ID match check
-        if (!isNaN(query)) {
-            const idUser = await prisma.user.findUnique({
-                where: { id: parseInt(query) },
-                select: { id: true, username: true, name: true }
-            });
-            if (idUser && idUser.id !== userId) {
-                if (!users.find(u => u.id === idUser.id)) {
-                    users.unshift(idUser);
-                }
+        const idUser = await prisma.user.findUnique({
+            where: { id: query },
+            select: { id: true, username: true, name: true }
+        });
+        if (idUser && idUser.id !== userId) {
+            if (!users.find(u => u.id === idUser.id)) {
+                users.unshift(idUser);
+            }
+        }
+        if (idUser && idUser.id !== userId) {
+            if (!users.find(u => u.id === idUser.id)) {
+                users.unshift(idUser);
             }
         }
 
@@ -51,8 +54,8 @@ class UserService {
 
     /**
      * Adds a friend (bidirectional).
-     * @param {number} userId 
-     * @param {number} friendId 
+     * @param {string} userId 
+     * @param {string} friendId 
      * @returns {Promise<void>}
      */
     async addFriend(userId, friendId) {
@@ -89,7 +92,7 @@ class UserService {
 
     /**
      * Get user's friend list.
-     * @param {number} userId 
+     * @param {string} userId 
      * @returns {Promise<Array>}
      */
     async getFriends(userId) {

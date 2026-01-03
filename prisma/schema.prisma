@@ -11,7 +11,7 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   username  String   @unique // 登入帳號 (ID)
   password  String           // 密碼 (加密後)
   name      String           // 顯示名稱 (Amy, Bob)
@@ -32,7 +32,7 @@ model User {
 
 // 2. 團購主單 (Group)
 model Group {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   title     String   // 團名 (例如: KFC)
   startTime DateTime // 開始時間
   endTime   DateTime // 結束時間
@@ -40,7 +40,7 @@ model Group {
   createdAt DateTime @default(now())
 
   // --- 關聯：團長是誰？ ---
-  creatorId Int
+  creatorId String
   creator   User   @relation("GroupCreator", fields: [creatorId], references: [id])
 
   // --- 關聯：這團有哪些訂單？ ---
@@ -52,12 +52,12 @@ model Group {
 
 // 新增：團購可選品項 (這就是菜單！)
 model GroupProduct {
-  id       Int    @id @default(autoincrement())
+  id       String @id @default(uuid())
   name     String // 品項名 (例如: "KFC 蛋塔")
   price    Int    // 設定好的價格 (例如: 35)
   
   // 屬於哪一團的菜單？
-  groupId  Int
+  groupId  String
   group    Group  @relation(fields: [groupId], references: [id])
 
   // --- 對應的訂單項目 ---
@@ -66,14 +66,14 @@ model GroupProduct {
 
 // 3. 個人訂單 (Order) - 連結 人 與 團
 model Order {
-  id      Int      @id @default(autoincrement())
+  id      String   @id @default(uuid())
   
   // --- 關聯：誰填的？ ---
-  userId  Int
+  userId  String
   user    User     @relation(fields: [userId], references: [id])
   
   // --- 關聯：哪一團？ ---
-  groupId Int
+  groupId String
   group   Group    @relation(fields: [groupId], references: [id])
 
   // --- 內容：買了什麼？ ---
@@ -88,16 +88,16 @@ model Order {
 
 // 4. 訂單細項 (OrderItem) - 商品內容
 model OrderItem {
-  id       Int    @id @default(autoincrement())
+  id       String @id @default(uuid())
   name     String // 品項名 (Hamburger)
   price    Int    // 單價 (130)
   quantity Int    // 數量 (2)
   
   // --- 關聯：屬於哪張單？ ---
-  orderId  Int
+  orderId  String
   order    Order  @relation(fields: [orderId], references: [id])
 
   // --- 關聯：對應哪個菜單品項？ (解決價格同步與冗餘問題) ---
-  productId Int?
+  productId String?
   product   GroupProduct? @relation(fields: [productId], references: [id])
 }

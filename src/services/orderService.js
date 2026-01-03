@@ -8,8 +8,8 @@ class OrderService {
 
     /**
      * Updates (or creates) an order for a user in a group.
-     * @param {number} userId 
-     * @param {number} groupId 
+     * @param {string} userId 
+     * @param {string} groupId 
      * @param {Array} items - Array of { name, price, quantity }
      * @returns {Promise<Object>} - Updated order details.
      */
@@ -115,8 +115,8 @@ class OrderService {
 
     /**
      * Retrieves detailed group summary.
-     * @param {number} userId 
-     * @param {number} groupId 
+     * @param {string} userId 
+     * @param {string} groupId 
      * @returns {Promise<Object>}
      */
     async getGroupSummary(userId, groupId) {
@@ -205,8 +205,8 @@ class OrderService {
 
     /**
      * Updates payment status of an order.
-     * @param {number} userId - Requesting user (must be creator)
-     * @param {number} orderId 
+     * @param {string} userId - Requesting user (must be creator)
+     * @param {string} orderId 
      * @param {string} status 
      * @returns {Promise<Object>}
      */
