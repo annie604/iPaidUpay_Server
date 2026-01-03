@@ -72,3 +72,4 @@ docker compose up -d
 
 - `npx prisma generate`: Generate Prisma client.
 - `npx prisma studio`: Open database GUI.
+- `npx prisma migrate dev --name update_product_id`: Generate Prisma client with specific generator.
