@@ -182,7 +182,7 @@ class GroupService {
         // Add missing
         const toAdd = [...targetUserIds].filter(uid => !existingUserIds.includes(uid));
         if (toAdd.length > 0) {
-            await prisma.order.createMany({
+            await prisma.groupOrder.createMany({
                 data: toAdd.map(uid => ({
                     userId: uid,
                     groupId: groupId
@@ -193,7 +193,7 @@ class GroupService {
         // Remove uninvited
         const toRemove = existingUserIds.filter(uid => !targetUserIds.has(uid) && uid !== userId);
         if (toRemove.length > 0) {
-            const ordersToDelete = await prisma.order.findMany({
+            const ordersToDelete = await prisma.groupOrder.findMany({
                 where: {
                     groupId: groupId,
                     userId: { in: toRemove }
@@ -203,28 +203,28 @@ class GroupService {
             const orderIds = ordersToDelete.map(o => o.id);
 
             if (orderIds.length > 0) {
-                await prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
-                await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
+                await prisma.userOrder.deleteMany({ where: { orderId: { in: orderIds } } });
+                await prisma.groupOrder.deleteMany({ where: { id: { in: orderIds } } });
             }
         }
 
         // --- Product Sync ---
         if (products && Array.isArray(products)) {
             const updates = products.filter(p => p.id).map(p =>
-                prisma.groupProduct.update({
+                prisma.groupMenu.update({
                     where: { id: p.id },
                     data: { name: p.name, price: p.price }
                 })
             );
 
             const creates = products.filter(p => !p.id).map(p =>
-                prisma.groupProduct.create({
+                prisma.groupMenu.create({
                     data: { name: p.name, price: p.price, groupId: groupId }
                 })
             );
 
             const keepIds = products.filter(p => p.id).map(p => p.id);
-            const productsToDelete = await prisma.groupProduct.findMany({
+            const productsToDelete = await prisma.groupMenu.findMany({
                 where: { groupId: groupId, id: { notIn: keepIds } }
             });
 
@@ -233,7 +233,7 @@ class GroupService {
                 const idsToDelete = productsToDelete.map(p => p.id);
 
                 // Check usage by ID or Name (for legacy data)
-                const usedItem = await prisma.orderItem.findFirst({
+                const usedItem = await prisma.userOrder.findFirst({
                     where: {
                         order: { groupId: groupId },
                         OR: [
@@ -247,7 +247,7 @@ class GroupService {
                     throw new Error(`Cannot delete item "${usedItem.name}" because it has been ordered by a member.`);
                 }
 
-                const deleteOp = prisma.groupProduct.deleteMany({
+                const deleteOp = prisma.groupMenu.deleteMany({
                     where: { id: { in: productsToDelete.map(p => p.id) } }
                 });
 
@@ -259,7 +259,7 @@ class GroupService {
                 // 2. Update OrderItems linked by Name (Legacy fallback)
 
                 const syncOps = [];
-                const existingProducts = await prisma.groupProduct.findMany({ where: { groupId } });
+                const existingProducts = await prisma.groupMenu.findMany({ where: { groupId } });
 
                 for (const newProd of products) {
                     if (newProd.id) {
@@ -267,7 +267,7 @@ class GroupService {
                         if (oldProd && (oldProd.name !== newProd.name || oldProd.price !== newProd.price)) {
                             // Sync by ID (New Standard)
                             syncOps.push(
-                                prisma.orderItem.updateMany({
+                                prisma.userOrder.updateMany({
                                     where: { productId: newProd.id },
                                     data: { name: newProd.name, price: newProd.price }
                                 })
@@ -275,7 +275,7 @@ class GroupService {
 
                             // Sync by Name (Legacy Support - only if productId is null)
                             syncOps.push(
-                                prisma.orderItem.updateMany({
+                                prisma.userOrder.updateMany({
                                     where: {
                                         order: { groupId: groupId },
                                         name: oldProd.name,
@@ -292,7 +292,7 @@ class GroupService {
             }
         }
 
-        return await prisma.groupProduct.findMany({ where: { groupId } });
+        return await prisma.groupMenu.findMany({ where: { groupId } });
     }
 
     /**
@@ -305,18 +305,18 @@ class GroupService {
         if (!group) throw new Error('Group not found');
         if (group.creatorId !== userId) throw new Error('Not authorized');
 
-        const unpaidOrders = await prisma.order.findFirst({
+        const unpaidOrders = await prisma.groupOrder.findFirst({
             where: { groupId, paymentStatus: 'UNPAID' }
         });
         if (unpaidOrders) throw new Error('Cannot delete group: Some members have not paid.');
 
-        const groupOrders = await prisma.order.findMany({ where: { groupId }, select: { id: true } });
+        const groupOrders = await prisma.groupOrder.findMany({ where: { groupId }, select: { id: true } });
         const orderIds = groupOrders.map(o => o.id);
 
         await prisma.$transaction([
-            prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } }),
-            prisma.order.deleteMany({ where: { groupId } }),
-            prisma.groupProduct.deleteMany({ where: { groupId } }),
+            prisma.userOrder.deleteMany({ where: { orderId: { in: orderIds } } }),
+            prisma.groupOrder.deleteMany({ where: { groupId } }),
+            prisma.groupMenu.deleteMany({ where: { groupId } }),
             prisma.group.delete({ where: { id: groupId } })
         ]);
     }

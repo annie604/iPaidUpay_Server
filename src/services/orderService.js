@@ -31,12 +31,12 @@ class OrderService {
         if (group.status === 'CLOSED') throw new Error('Group is closed. Cannot update order.');
 
         // Find or Create Order
-        let order = await prisma.order.findFirst({
+        let order = await prisma.groupOrder.findFirst({
             where: { userId, groupId }
         });
 
         if (!order) {
-            order = await prisma.order.create({
+            order = await prisma.groupOrder.create({
                 data: { userId, groupId }
             });
         }
@@ -45,11 +45,11 @@ class OrderService {
 
         // Transactional Update
         await prisma.$transaction(async (tx) => {
-            await tx.orderItem.deleteMany({ where: { orderId } });
+            await tx.userOrder.deleteMany({ where: { orderId } });
 
             if (items && items.length > 0) {
                 // 1. Fetch current GroupProducts to get authoritative prices and IDs
-                const groupProducts = await tx.groupProduct.findMany({
+                const groupProducts = await tx.groupMenu.findMany({
                     where: { groupId }
                 });
 
@@ -83,19 +83,19 @@ class OrderService {
                     }
                 });
 
-                await tx.orderItem.createMany({
+                await tx.userOrder.createMany({
                     data: newItems
                 });
             }
 
-            await tx.order.update({
+            await tx.groupOrder.update({
                 where: { id: orderId },
                 data: { updatedAt: new Date() }
             });
         });
 
         // Fetch updated
-        const updatedOrder = await prisma.order.findUnique({
+        const updatedOrder = await prisma.groupOrder.findUnique({
             where: { id: orderId },
             include: { items: true }
         });
@@ -215,7 +215,7 @@ class OrderService {
             throw new Error('Invalid status. Must be PAID or UNPAID.');
         }
 
-        const order = await prisma.order.findUnique({
+        const order = await prisma.groupOrder.findUnique({
             where: { id: orderId },
             include: { group: true }
         });
@@ -223,7 +223,7 @@ class OrderService {
         if (!order) throw new Error('Order not found');
         if (order.group.creatorId !== userId) throw new Error('Not authorized');
 
-        const updatedOrder = await prisma.order.update({
+        const updatedOrder = await prisma.groupOrder.update({
             where: { id: orderId },
             data: { paymentStatus: status }
         });

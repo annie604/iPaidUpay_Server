@@ -23,7 +23,7 @@ model User {
   createdGroups Group[] @relation("GroupCreator")
 
   // 2. 這個人「填」的單 (他是參加者)
-  orders        Order[]
+  orders        GroupOrder[]
 
   // 3. 朋友關係
   friends   User[]   @relation("UserFriends")
@@ -44,14 +44,14 @@ model Group {
   creator   User   @relation("GroupCreator", fields: [creatorId], references: [id])
 
   // --- 關聯：這團有哪些訂單？ ---
-  orders    Order[]
+  orders    GroupOrder[]
 
   //  新增關聯：這團的菜單有哪些東西？
-  products    GroupProduct[]
+  products    GroupMenu[]
 }
 
 // 新增：團購可選品項 (這就是菜單！)
-model GroupProduct {
+model GroupMenu {
   id       String @id @default(uuid())
   name     String // 品項名 (例如: "KFC 蛋塔")
   price    Int    // 設定好的價格 (例如: 35)
@@ -61,11 +61,11 @@ model GroupProduct {
   group    Group  @relation(fields: [groupId], references: [id])
 
   // --- 對應的訂單項目 ---
-  orderItems OrderItem[]
+  orderItems UserOrder[]
 }
 
-// 3. 個人訂單 (Order) - 連結 人 與 團
-model Order {
+// 3. 個人訂單 (GroupOrder) - 連結 人 與 團
+model GroupOrder {
   id      String   @id @default(uuid())
   
   // --- 關聯：誰填的？ ---
@@ -77,7 +77,7 @@ model Order {
   group   Group    @relation(fields: [groupId], references: [id])
 
   // --- 內容：買了什麼？ ---
-  items   OrderItem[]
+  items   UserOrder[]
   
   // Pament status: "UNPAID" or "PAID"
   paymentStatus String   @default("UNPAID")
@@ -86,8 +86,8 @@ model Order {
   updatedAt DateTime @default(now()) @updatedAt
 }
 
-// 4. 訂單細項 (OrderItem) - 商品內容
-model OrderItem {
+// 4. 訂單細項 (UserOrder) - 商品內容
+model UserOrder {
   id       String @id @default(uuid())
   name     String // 品項名 (Hamburger)
   price    Int    // 單價 (130)
@@ -95,9 +95,9 @@ model OrderItem {
   
   // --- 關聯：屬於哪張單？ ---
   orderId  String
-  order    Order  @relation(fields: [orderId], references: [id])
+  order    GroupOrder  @relation(fields: [orderId], references: [id])
 
   // --- 關聯：對應哪個菜單品項？ (解決價格同步與冗餘問題) ---
   productId String?
-  product   GroupProduct? @relation(fields: [productId], references: [id])
+  product   GroupMenu? @relation(fields: [productId], references: [id])
 }
