@@ -203,7 +203,7 @@ class GroupService {
             const orderIds = ordersToDelete.map(o => o.id);
 
             if (orderIds.length > 0) {
-                await prisma.userOrder.deleteMany({ where: { orderId: { in: orderIds } } });
+                await prisma.userOrder.deleteMany({ where: { groupOrderId: { in: orderIds } } });
                 await prisma.groupOrder.deleteMany({ where: { id: { in: orderIds } } });
             }
         }
@@ -237,7 +237,7 @@ class GroupService {
                     where: {
                         order: { groupId: groupId },
                         OR: [
-                            { productId: { in: idsToDelete } },
+                            { menuId: { in: idsToDelete } },
                             { name: { in: namesToDelete } }
                         ]
                     }
@@ -268,7 +268,7 @@ class GroupService {
                             // Sync by ID (New Standard)
                             syncOps.push(
                                 prisma.userOrder.updateMany({
-                                    where: { productId: newProd.id },
+                                    where: { menuId: newProd.id },
                                     data: { name: newProd.name, price: newProd.price }
                                 })
                             );
@@ -279,9 +279,9 @@ class GroupService {
                                     where: {
                                         order: { groupId: groupId },
                                         name: oldProd.name,
-                                        productId: null
+                                        menuId: null
                                     },
-                                    data: { name: newProd.name, price: newProd.price, productId: newProd.id }
+                                    data: { name: newProd.name, price: newProd.price, menuId: newProd.id }
                                     // Also auto-link legacy items to the product ID now!
                                 })
                             );
@@ -314,7 +314,7 @@ class GroupService {
         const orderIds = groupOrders.map(o => o.id);
 
         await prisma.$transaction([
-            prisma.userOrder.deleteMany({ where: { orderId: { in: orderIds } } }),
+            prisma.userOrder.deleteMany({ where: { groupOrderId: { in: orderIds } } }),
             prisma.groupOrder.deleteMany({ where: { groupId } }),
             prisma.groupMenu.deleteMany({ where: { groupId } }),
             prisma.group.delete({ where: { id: groupId } })

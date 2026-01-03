@@ -45,7 +45,7 @@ class OrderService {
 
         // Transactional Update
         await prisma.$transaction(async (tx) => {
-            await tx.userOrder.deleteMany({ where: { orderId } });
+            await tx.userOrder.deleteMany({ where: { groupOrderId: orderId } });
 
             if (items && items.length > 0) {
                 // 1. Fetch current GroupProducts to get authoritative prices and IDs
@@ -56,7 +56,9 @@ class OrderService {
                 const newItems = items.map(inputItem => {
                     // Try to match by ID first, then Name
                     let product = null;
-                    if (inputItem.productId) {
+                    if (inputItem.menuId) {
+                        product = groupProducts.find(p => p.id === inputItem.menuId);
+                    } else if (inputItem.productId) { // Legacy support
                         product = groupProducts.find(p => p.id === inputItem.productId);
                     } else if (inputItem.name) {
                         product = groupProducts.find(p => p.name === inputItem.name);
@@ -64,21 +66,21 @@ class OrderService {
 
                     if (product) {
                         return {
-                            orderId,
+                            groupOrderId: orderId,
                             name: product.name,
                             price: Number(product.price), // Enforce verified price
                             quantity: Number(inputItem.quantity),
-                            productId: product.id         // Link for future updates
+                            menuId: product.id         // Link for future updates
                         };
                     } else {
                         // Fallback for custom items (if allowed) or error
                         // For now we allow custom items but warning: they won't auto-update
                         return {
-                            orderId,
+                            groupOrderId: orderId,
                             name: inputItem.name,
                             price: Number(inputItem.price),
                             quantity: Number(inputItem.quantity),
-                            productId: null
+                            menuId: null
                         };
                     }
                 });

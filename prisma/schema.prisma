@@ -94,10 +94,10 @@ model UserOrder {
   quantity Int    // 數量 (2)
   
   // --- 關聯：屬於哪張單？ ---
-  orderId  String
-  order    GroupOrder  @relation(fields: [orderId], references: [id])
+  groupOrderId  String
+  order    GroupOrder  @relation(fields: [groupOrderId], references: [id])
 
   // --- 關聯：對應哪個菜單品項？ (解決價格同步與冗餘問題) ---
-  productId String?
-  product   GroupMenu? @relation(fields: [productId], references: [id])
+  menuId String?
+  product   GroupMenu? @relation(fields: [menuId], references: [id])
 }
