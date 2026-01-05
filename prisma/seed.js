@@ -4,8 +4,8 @@ const prisma = new PrismaClient();
 
 async function main() {
     // Clean up
-    await prisma.orderItem.deleteMany();
-    await prisma.order.deleteMany();
+    await prisma.userOrder.deleteMany();
+    await prisma.groupOrder.deleteMany();
     await prisma.group.deleteMany();
     await prisma.user.deleteMany();
 
@@ -42,7 +42,7 @@ async function main() {
 
     // Orders for KFC
     // Amy's order
-    await prisma.order.create({
+    await prisma.groupOrder.create({
         data: {
             userId: amy.id,
             groupId: kfc.id,
@@ -59,7 +59,7 @@ async function main() {
     });
 
     // Bob's order
-    await prisma.order.create({
+    await prisma.groupOrder.create({
         data: {
             userId: bob.id,
             groupId: kfc.id,
@@ -70,7 +70,7 @@ async function main() {
     });
 
     // David's order (just joined)
-    await prisma.order.create({
+    await prisma.groupOrder.create({
         data: {
             userId: david.id,
             groupId: kfc.id,
@@ -81,7 +81,7 @@ async function main() {
     });
 
     // Sam's order
-    await prisma.order.create({
+    await prisma.groupOrder.create({
         data: {
             userId: sam.id,
             groupId: kfc.id,
@@ -110,7 +110,7 @@ async function main() {
     // So Amy must have an order in BK for it to show?
     // Or maybe "Friends" groups show up?
     // For now, let's make Amy join BK so it shows up.
-    await prisma.order.create({
+    await prisma.groupOrder.create({
         data: {
             userId: amy.id,
             groupId: bk.id,
@@ -122,7 +122,7 @@ async function main() {
         }
     });
 
-    await prisma.order.create({
+    await prisma.groupOrder.create({
         data: {
             userId: bob.id,
             groupId: bk.id,
